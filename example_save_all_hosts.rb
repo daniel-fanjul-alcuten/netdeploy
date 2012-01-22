@@ -1,17 +1,25 @@
-#!/usr/bin/env ruby1.9.1
+#!/usr/bin/env jruby
 
+require './lib/mkworkdir.rb'
+require './lib/execute_threads.rb'
 require './lib/save_host.rb'
 
-projects = ['foo', 'bar']
+operations = []
+projects.each { |project|
+	hosts.each { |host|
+		operations << { :project => project, :host => host, :path => host_path(project, host) }
+	}
+}
 
-mkworkdir { |dir|
-	execute_lines "git clone -n -s . '#{dir}'"
+mkworkdirs(num_threads) { |dirs|
+	execute_threads(dirs, operations) { |dir, operation, first_time|
 
-	first_time = true
-	projects.each { |project|
-		save_host project, 'localhost', '/tmp/deploy1/' + project, dir, first_time
-		first_time = false
-		save_host project, `hostname`.chomp, '/tmp/deploy2/' + project, dir, first_time
+		git_clone dir if first_time
+
+		project = operation[:project]
+		host = operation[:host]
+		path = operation[:path]
+		save_host project, host, path, dir, first_time
 	}
 }
 

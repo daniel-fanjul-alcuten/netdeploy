@@ -1,24 +1,41 @@
-#!/usr/bin/env ruby1.9.1
+#!/usr/bin/env jruby
 
+require './lib/mkworkdir.rb'
+require './lib/execute_threads.rb'
 require './lib/save_project.rb'
 require './lib/deploy_cache.rb'
 require './lib/deploy_host.rb'
 
-projects = ['foo', 'bar']
+operations = []
+projects.each { |project|
+	operations << { :project => project, :path => project_path(project) }
+}
 
-mkworkdir { |dir|
-	execute_lines "git clone -n -s . '#{dir}'"
+mkworkdirs(num_threads) { |dirs|
+	execute_threads(dirs, operations) { |dir, operation, first_time|
 
-	projects.each { |project|
-		save_project project, 'build/' + project, dir
+		git_clone dir if first_time
+
+		project = operation[:project]
+		path = operation[:path]
+		save_project project, path, dir
+	}
+}
+
+operations = []
+projects.each { |project|
+	hosts.each { |host|
+		operations << { :project => project, :host => host, :remote_path => host_path(project, host) }
 	}
 }
 
 deploy_cache = DeployCache.new
 begin
-	projects.each { |project|
-		deploy_host project, 'localhost', '/tmp/deploy1/' + project, deploy_cache
-		deploy_host project, `hostname`.chomp, '/tmp/deploy2/' + project, deploy_cache
+	execute_threads(1..num_threads, operations) { |dir, operation, first_time|
+		project = operation[:project]
+		host = operation[:host]
+		remote_path = operation[:remote_path]
+		deploy_host project, host, remote_path, deploy_cache
 	}
 ensure
 	deploy_cache.remove_work_dirs
